@@ -1,6 +1,7 @@
 package compiler.project.LexicalAnalyzer.service;
 
 import compiler.project.LexicalAnalyzer.ResponseDto;
+import compiler.project.LexicalAnalyzer.exception.LexicalAnalysisException;
 import compiler.project.LexicalAnalyzer.model.FileReader;
 import compiler.project.LexicalAnalyzer.model.SymbolTable;
 import compiler.project.LexicalAnalyzer.model.Token;
@@ -63,6 +64,11 @@ public class AnalyzeService {
             }
             if (ch1 == '\n' || ch1 == '\r' || ch1 == '\t' || ch1 == ' ')
                 continue;
+            token = this.commentToken(ch1);
+            if (token != null) {
+                tokens.add(token);
+                continue;
+            }
             token = this.arithmatichOpToken(ch1);
             if (token != null) {
                 tokens.add(token);
@@ -113,7 +119,10 @@ public class AnalyzeService {
             if (token != null) {
                 tokens.add(token);
             } else
-                throw new IllegalArgumentException("bad word : " + ch1);
+                throw new LexicalAnalysisException(
+                        "Invalid character or token",
+                        Character.toString(ch1)
+                );
         }
         List<ResponseDto> responseDtos = new ArrayList<>();
         for (Token token2 : tokens) {
@@ -161,19 +170,25 @@ public class AnalyzeService {
             if (stringBuilder.toString().equals("!="))
                 token.setAttribute("!=");
             else
-                return null; // throw exception
+                return null;
         } else if (stringBuilder.toString().equals(">")) {
-            stringBuilder.append((char) fileReader.readChar());
+            char ch = (char) fileReader.readChar();
+            stringBuilder.append(ch);
             if (stringBuilder.toString().equals(">="))
                 token.setAttribute(">=");
-            else
+            else {
                 token.setAttribute(">");
+                fileReader.unreadChar(ch);
+            }
         } else if (stringBuilder.toString().equals("<")) {
-            stringBuilder.append((char) fileReader.readChar());
+            char ch = (char) fileReader.readChar();
+            stringBuilder.append(ch);
             if (stringBuilder.toString().equals("<="))
                 token.setAttribute("<=");
-            else
+            else {
+                fileReader.unreadChar(ch);
                 token.setAttribute("<");
+            }
         } else
             return null;
         return token;
@@ -247,21 +262,45 @@ public class AnalyzeService {
             stringBuilder.append(character);
             String s = isNumber((char) fileReader.readChar());
             stringBuilder.append(s);
-            char c =  (char) fileReader.readChar();
+            char c = (char) fileReader.readChar();
             if (c == '.') {
                 stringBuilder.append(".");
                 String s1 = isNumber((char) fileReader.readChar());
                 stringBuilder.append(s1);
-                c =  (char) fileReader.readChar();
+                c = (char) fileReader.readChar();
             }
             if (c == 'E') {
                 stringBuilder.append("E");
                 char ch = (char) fileReader.readChar();
-                if (ch == '+' || ch == '-') {
+                if (!isDigit(ch) && ch != '+' && ch != '-') {
+                        throw new LexicalAnalysisException(
+                                "Invalid exponent format",
+                                stringBuilder.toString()
+                        );
+                }
+                if (ch == '+' || ch == '-' || isDigit(ch)) {
                     stringBuilder.append(ch);
-                    String s2 = isNumber((char) fileReader.readChar());
+                    ch = (char) fileReader.readChar();
+                    if (!isDigit(ch)) {
+                            throw new LexicalAnalysisException(
+                                    "Invalid exponent format",
+                                    stringBuilder.toString()
+                            );
+                        }
+                    String s2 = isNumber(ch);
                     stringBuilder.append(s2);
                 }
+            }
+            if (c != '.' && c != 'E') {
+                fileReader.unreadChar(c);
+            }
+            char ch = (char) fileReader.readChar();
+            if (isLetter(ch)) {
+                fileReader.unreadChar(ch);
+                throw new LexicalAnalysisException(
+                        "Numbers cannot be followed by letters",
+                        stringBuilder.toString() + ch
+                );
             }
         } else
             return null;
@@ -281,7 +320,6 @@ public class AnalyzeService {
 
     public String isWord(char character) throws IOException {
         StringBuilder stringBuilder = new StringBuilder();
-        stringBuilder.append(character);
         while (isLetter(character)) {
             stringBuilder.append(character);
             character = (char) fileReader.readChar();
@@ -327,6 +365,29 @@ public class AnalyzeService {
         }
         return token;
     }
+
+    public Token commentToken(char character) throws IOException {
+        if (character == '/') {
+            int nextChar = fileReader.readChar();
+            if (nextChar == '/') {
+                StringBuilder stringBuilder = new StringBuilder();
+                stringBuilder.append("//");
+                int c;
+                while ((c = fileReader.readChar()) != -1 && c != '\n' && c != '\r') {
+                    stringBuilder.append((char) c);
+                }
+
+                Token token = new Token();
+                token.setName("comment");
+                token.setAttribute(stringBuilder.toString());
+                return token;
+            } else {
+                fileReader.unreadChar(nextChar);
+            }
+        }
+        return null;
+    }
+
 
     public boolean isDigit(char character) {
         return character == '0' || character == '1' || character == '2' || character == '3' || character == '4' ||
