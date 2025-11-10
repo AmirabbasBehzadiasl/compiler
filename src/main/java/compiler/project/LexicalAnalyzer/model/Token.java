@@ -36,4 +36,12 @@ public class Token {
     public void setAttribute(String attribute) {
         this.attribute = attribute;
     }
+
+    @Override
+    public String toString() {
+        return "Token{" +
+                "name='" + name + '\'' +
+                ", attribute='" + attribute + '\'' +
+                '}';
+    }
 }

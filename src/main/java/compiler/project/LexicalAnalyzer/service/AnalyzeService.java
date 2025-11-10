@@ -27,7 +27,6 @@ public class AnalyzeService {
     }
 
     public void initKeyWords(List<String> keyWords) {
-        System.out.println("in service  initKeyWords");
         for (String word : keyWords) {
             SymbolTable symbolTable = new SymbolTable();
             symbolTable.setName(word);
@@ -46,7 +45,6 @@ public class AnalyzeService {
 
             Files.write(filePath, input.getBytes());
 
-            System.out.println(" file saved successfully" + filePath.toAbsolutePath());
 
         } catch (IOException e) {
             System.err.println("error" + e.getMessage());
@@ -59,65 +57,63 @@ public class AnalyzeService {
         int ch;
         while (true) {
             ch = fileReader.readChar();
-            if (ch == -1) {
+            char ch1 = (char) ch;
+            if (ch == -1 || ch1 == '\uFFFF') {
                 break;
             }
-            if ((char) ch == '\n' || (char) ch == '\r' || (char) ch == '\t' || (char) ch == ' ')
+            if (ch1 == '\n' || ch1 == '\r' || ch1 == '\t' || ch1 == ' ')
                 continue;
-            token = this.arithmatichOpToken((char) ch);
+            token = this.arithmatichOpToken(ch1);
             if (token != null) {
                 tokens.add(token);
                 continue;
             }
-            token = this.relationalOpToken((char) ch);
+            token = this.relationalOpToken(ch1);
             if (token != null) {
                 tokens.add(token);
                 continue;
             }
-            token = this.assignOpToken((char) ch);
+            token = this.assignOpToken(ch1);
+            if (token != null) {
+                tokens.add(token);
+
+                continue;
+            }
+            token = this.openPToken(ch1);
             if (token != null) {
                 tokens.add(token);
                 continue;
             }
-            token = this.openPToken((char) ch);
+            token = this.closePToken(ch1);
             if (token != null) {
                 tokens.add(token);
                 continue;
             }
-            token = this.closePToken((char) ch);
+            token = this.openBToken(ch1);
             if (token != null) {
                 tokens.add(token);
                 continue;
             }
-            token = this.openBToken((char) ch);
+            token = this.closeBToken(ch1);
             if (token != null) {
                 tokens.add(token);
                 continue;
             }
-            ;
-            token = this.closeBToken((char) ch);
+            token = this.scToken(ch1);
             if (token != null) {
                 tokens.add(token);
                 continue;
             }
-            ;
-            token = this.scToken((char) ch);
+            token = this.numberToken(ch1);
             if (token != null) {
                 tokens.add(token);
                 continue;
             }
-            ;
-            token = this.numberToken((char) ch);
-            if (token != null) {
-                tokens.add(token);
-                continue;
-            }
-            ;
-            token = this.idAndKeywordToken((char) ch);
+            token = this.idAndKeywordToken(ch1);
             if (token != null) {
                 tokens.add(token);
             } else
-                throw new IllegalArgumentException("bad word");
+                throw new IllegalArgumentException("bad word : " + ch1);
         }
         List<ResponseDto> responseDtos = new ArrayList<>();
         for (Token token2 : tokens) {
@@ -153,25 +149,27 @@ public class AnalyzeService {
         StringBuilder stringBuilder = new StringBuilder();
         stringBuilder.append(character);
         if (stringBuilder.toString().equals("=")) {
-            stringBuilder.append(fileReader.readChar());
+            stringBuilder.append((char) fileReader.readChar());
             if (stringBuilder.toString().equals("==")) {
                 token.setAttribute("==");
-            } else
-                assignOpToken(character);
+            } else {
+                token.setName(assignOpToken(character).getName());
+                token.setAttribute(assignOpToken(character).getAttribute());
+            }
         } else if (stringBuilder.toString().equals("!")) {
-            stringBuilder.append(fileReader.readChar());
+            stringBuilder.append((char) fileReader.readChar());
             if (stringBuilder.toString().equals("!="))
                 token.setAttribute("!=");
             else
                 return null; // throw exception
         } else if (stringBuilder.toString().equals(">")) {
-            stringBuilder.append(fileReader.readChar());
+            stringBuilder.append((char) fileReader.readChar());
             if (stringBuilder.toString().equals(">="))
                 token.setAttribute(">=");
             else
                 token.setAttribute(">");
         } else if (stringBuilder.toString().equals("<")) {
-            stringBuilder.append(fileReader.readChar());
+            stringBuilder.append((char) fileReader.readChar());
             if (stringBuilder.toString().equals("<="))
                 token.setAttribute("<=");
             else
@@ -245,16 +243,18 @@ public class AnalyzeService {
         Token token = new Token();
         token.setName("num");
         StringBuilder stringBuilder = new StringBuilder();
-        stringBuilder.append(character);
         if (isDigit(character)) {
+            stringBuilder.append(character);
             String s = isNumber((char) fileReader.readChar());
             stringBuilder.append(s);
-            if (fileReader.readChar() == '.') {
+            char c =  (char) fileReader.readChar();
+            if (c == '.') {
                 stringBuilder.append(".");
                 String s1 = isNumber((char) fileReader.readChar());
                 stringBuilder.append(s1);
+                c =  (char) fileReader.readChar();
             }
-            if (fileReader.readChar() == 'E') {
+            if (c == 'E') {
                 stringBuilder.append("E");
                 char ch = (char) fileReader.readChar();
                 if (ch == '+' || ch == '-') {
@@ -262,13 +262,10 @@ public class AnalyzeService {
                     String s2 = isNumber((char) fileReader.readChar());
                     stringBuilder.append(s2);
                 }
-            } else {
-                token.setAttribute(stringBuilder.toString());
-                return token;
             }
-
         } else
             return null;
+        token.setAttribute(stringBuilder.toString());
         return token;
     }
 
@@ -278,7 +275,7 @@ public class AnalyzeService {
             stringBuilder.append(character);
             character = (char) fileReader.readChar();
         }
-        fileReader.unreadChar(stringBuilder.charAt(stringBuilder.length() - 1));
+        fileReader.unreadChar(character);
         return stringBuilder.toString();
     }
 
@@ -287,18 +284,19 @@ public class AnalyzeService {
         stringBuilder.append(character);
         while (isLetter(character)) {
             stringBuilder.append(character);
+            character = (char) fileReader.readChar();
         }
-        fileReader.unreadChar(stringBuilder.charAt(stringBuilder.length() - 1));
+        fileReader.unreadChar(character);
         return stringBuilder.toString();
     }
 
     public String isNumberOrWord(char character) throws IOException {
         StringBuilder stringBuilder = new StringBuilder();
-        stringBuilder.append(character);
-        while (isLetter(character) ||  isDigit(character)) {
+        while (isLetter(character) || isDigit(character)) {
             stringBuilder.append(character);
+            character = (char) fileReader.readChar();
         }
-        fileReader.unreadChar(stringBuilder.charAt(stringBuilder.length() - 1));
+        fileReader.unreadChar(character);
         return stringBuilder.toString();
     }
 
@@ -307,7 +305,7 @@ public class AnalyzeService {
         StringBuilder stringBuilder = new StringBuilder();
         if (isLetter(character)) {
             stringBuilder.append(character);
-            String s = isNumberOrWord(character);
+            String s = isNumberOrWord((char) fileReader.readChar());
             stringBuilder.append(s);
         } else
             return null;
